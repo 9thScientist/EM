@@ -1,30 +1,84 @@
 MODULE main
 
 VAR
+    -- Estado do botão
     button : {UP, DOWN};
+    -- Fase do trem de aterragem
     phase : {movingup, movingdown, haltup, haltdown};
+    -- Estado das portas
+    dstate : {CLOSED, OPEN};
+    -- Estado do trinco
+    lstate : {LOCKED, UNLOCKED};
+    -- O estado de todo o processo. O estado avança geralmente neste sentido, complete -> unlock -> open -> close -> lock -> complete
+    -- Na estado unlock, deve-se destrancar o trinco
+    -- Na estado open, deve-se abrir as portas
+    -- Na estado close, deve-se fechar as portas
+    -- Na estado lock, deve-se trancar o trinco
+    -- Na estado complete, deve-se sorrir porque o processo de extensão/retração ficou concluido com sucesso
+    state : {unlock, open, close, lock, complete};
 
 IVAR
+    -- Botão pressionado pelo piloto, este pode optar por pressiona-lo a qualquer instante.
     press : {UP, DOWN};
 
 ASSIGN
+    -- Atribuit o estado inicial
     init(button) := DOWN;
     init(phase) := haltdown;
+    init(dstate) := CLOSED;
+    init(lstate) := LOCKED;
+    init(state) := complete;
 
+
+
+    -- O botão pressionado é exatamente o botão que o piloto pressiona.
     next(button) := press;
+
+    -- A fase altera para movingup/movingdown assim que o piloto pressione um botão
+    -- A fase finalmente muda para haltup/haltdown assim que o estado é "lock"
     next(phase) := case
                         press = DOWN & button = UP : movingdown;
                         press = UP & button = DOWN : movingup;
-                        phase = movingup : haltup;
-                        phase = movingdown : haltdown;
+                        phase = movingup & state = lock : haltup;
+                        phase = movingdown & state = lock : haltdown;
                         TRUE : phase;
                    esac;
+
+    -- O estado das portas só altera quando o estado global está em "open" ou "close"
+    next(dstate) := case
+                        state = open : OPEN;
+                        state = close : CLOSED;
+                        TRUE : dstate;
+                    esac;
+
+    -- O lstate varia entre LOCKED e UNLOCKED.
+    -- Se estivermos no estado de "lock", ele deve ser trancado, e no estado "unlock" destrancado.
+    -- Mas temos a situação excecional de quando o estado é "complete" e o piloto pressiona um botão e, imediatamente a seguir, o oposto. Nessas situações,
+    -- não devemos alterar o estado do trinco.
+    next(lstate) := case
+                        phase = lock & press = button : LOCKED;
+                        phase = unlock & press = button : UNLOCKED;
+                        TRUE : lstate;
+                    esac;
+
+    -- O estado, como foi dito anteriormente, vai no sentido complete -> unlock -> open -> close -> lock -> complete
+    -- Mas temos de ter em atenção a situação excecional quando o estdo é "complete" e o piloto pressiona um botão e, imediatamente a seguir, o oposto.
+    -- Nessa situação, o estado vai de complete -> unlock -> lock -> complete
+    next(state) := case
+                        state = complete : unlock;
+                        state = unlock : ((press != button) ?  lock : open);
+                        state = open : close;
+                        state = close : lock;
+                        state = lock : complete;
+                    esac;
 
 DEFINE
     goal := phase = movingup -> button = UP &
             phase = movingdown -> button = DOWN &
-              button = UP -> phase = movingup | phase = haltup &
-            button = DOWN -> phase = movingdown | phase = haltdown;
+            button = UP -> phase = movingup | phase = haltup &
+            button = DOWN -> phase = movingdown | phase = haltdown &
+            dstate = OPEN -> lstate = UNLOCKED &
+            dstate = CLOSE -> lstate = LOCKED ;
 
 CTLSPEC
     AG goal
