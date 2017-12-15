@@ -1,0 +1,30 @@
+MODULE main
+
+VAR
+    button : {UP, DOWN};
+    phase : {movingup, movingdown, haltup, haltdown};
+
+IVAR
+    press : {UP, DOWN};
+
+ASSIGN
+    init(button) := DOWN;
+    init(phase) := haltdown;
+
+    next(button) := press;
+    next(phase) := case
+                        press = DOWN & button = UP : movingdown;
+                        press = UP & button = DOWN : movingup;
+                        phase = movingup : haltup;
+                        phase = movingdown : haltdown;
+                        TRUE : phase;
+                   esac;
+
+DEFINE
+    goal := phase = movingup -> button = UP &
+            phase = movingdown -> button = DOWN &
+              button = UP -> phase = movingup | phase = haltup &
+            button = DOWN -> phase = movingdown | phase = haltdown;
+
+CTLSPEC
+    AG goal
