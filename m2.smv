@@ -108,8 +108,8 @@ ASSIGN
                         TRUE : gstate;
                     esac;
 
-    -- O estado seguinte será inevitável apenas se o seu "lstate" for LOCKED e "state" "lock".
-    next(inevitable) := next(lstate) = LOCKED & next(state) = lock;
+    -- O estado seguinte será inevitável apenas se o seu "lstate" for LOCKED e "state" "lock" ou no estado "gear".
+    next(inevitable) := next(lstate) = LOCKED & next(state) = lock | next(state) = gear;
 
 TRANS
     -- Para garantir que, num estado inevitável, o botão não será mudado,
@@ -124,7 +124,7 @@ LTLSPEC
     -- - o estado será haltdown
     -- - o trinco estará trancado
     -- - as portas estarão fechadas
-    G ( G button = DOWN & state != gear -> F (phase = haltdown & lstate = LOCKED & dstate = CLOSED) );
+    G ( G button = DOWN -> F (phase = haltdown & lstate = LOCKED & dstate = CLOSED) );
 
 -- R12bis
 LTLSPEC
@@ -132,7 +132,7 @@ LTLSPEC
     -- - o estado será haltup
     -- - o trinco estará trancado
     -- - as portas estarão fechadas
-    G ( G button = UP & state != gear -> F (phase = haltup & lstate = LOCKED & dstate = CLOSED) );
+    G ( G button = UP -> F (phase = haltup & lstate = LOCKED & dstate = CLOSED) );
 
 CTLSPEC
     AG goal
