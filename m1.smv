@@ -1,17 +1,25 @@
 MODULE main
 
 VAR
+    -- Estado do botão
     button : {UP, DOWN};
+    -- Fase do trem de aterragem
     phase : {movingup, movingdown, haltup, haltdown};
 
 IVAR
+    -- Botão pressionado pelo piloto, este pode optar por pressiona-lo a qualquer instante.
     press : {UP, DOWN};
 
 ASSIGN
-    init(button) := DOWN;
-    init(phase) := haltdown;
+    -- Atribui o estado inicial
+    init(button) := UP;
+    init(phase) := haltup;
 
+    -- O botão pressionado é exatamente o botão que o piloto pressiona.
     next(button) := press;
+
+    -- A fase altera para movingup/movingdown assim que o piloto pressione um botão
+    -- A fase seguinte à fase movingup/movingdown é haltup/hatldown
     next(phase) := case
                         press = DOWN & button = UP : movingdown;
                         press = UP & button = DOWN : movingup;
@@ -21,10 +29,19 @@ ASSIGN
                    esac;
 
 DEFINE
-    goal := phase = movingup -> button = UP &
-            phase = movingdown -> button = DOWN &
-              button = UP -> phase = movingup | phase = haltup &
-            button = DOWN -> phase = movingdown | phase = haltdown;
+    -- O Objetivo final é verificar que o estado do botão é coerente com o estado real do sistema
+    goal := phase in {movingup, haltup} -> button = UP &
+            phase in {movingdown, haltdown} -> button = DOWN;
+
+-- R11bis
+LTLSPEC
+    -- Se o botão foi pressionado e estiver DOWN, então inevitavelmente o estado será haltdown.
+    G ( G button = DOWN -> F phase = haltdown );
+
+-- R12bis
+LTLSPEC
+    -- Se o botão foi pressionado e estiver UP, então inevitavelmente, o estado será haltup.
+    G ( G button = UP -> F phase = haltup );
 
 CTLSPEC
     AG goal
