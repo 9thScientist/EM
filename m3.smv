@@ -9,14 +9,15 @@ VAR
     dstate : {CLOSED, OPEN};
     -- Estado do trinco
     lstate : {LOCKED, UNLOCKED};
-    -- O estado de todo o processo. O estado avança geralmente neste sentido, complete -> unlock -> open -> close -> lock -> complete
+    -- O estado de todo o processo. O estado avança geralmente neste sentido, complete -> unlock -> open -> gstart -> gmove -> close -> lock -> complete
     -- Na estado unlock, deve-se destrancar o trinco
     -- Na estado open, deve-se abrir as portas
-    -- No estado gear, deve iniciar o processo de retracting ou extending da engrenagem
+    -- No estado gstart, deve iniciar o processo de retracting ou extending da engrenagem
+    -- No estado gmove, deve finalizar a deslocação da engrenagem
     -- Na estado close, deve-se fechar as portas
     -- Na estado lock, deve-se trancar o trinco
     -- Na estado complete, deve-se sorrir porque o processo de extensão/retração ficou concluido com sucesso
-    state : {unlock, open, gear, close, lock, complete};
+    state : {unlock, open, gstart, gmove, close, lock, complete};
     -- Estado da engrenagem
     gstate : { RETRACTED, EXTENDED, RETRACTING, EXTENDING};
 
@@ -51,7 +52,7 @@ ASSIGN
     init(dstate) := CLOSED;
     init(lstate) := LOCKED;
     init(state) := complete;
-    init(gstate) := RETRACTED;
+    init(gstate) := EXTENDED;
     init(inevitable) := FALSE;
 
 
@@ -59,8 +60,8 @@ ASSIGN
     -- A fase altera para movingup/movingdown assim que o piloto pressione um botão
     -- A fase finalmente muda para haltup/haltdown assim que o estado é "lock"
     next(phase) := case
-                        state != gear & next(button) = DOWN & button = UP : movingdown;
-                        state != gear & next(button) = UP & button = DOWN : movingup;
+                        next(button) = DOWN & button = UP : movingdown;
+                        next(button) = UP & button = DOWN : movingup;
                         phase = movingup & state = lock : haltup;
                         phase = movingdown & state = lock : haltdown;
                         TRUE : phase;
@@ -68,7 +69,7 @@ ASSIGN
 
     -- O estado das portas só altera quando o estado global está em "open" ou "close"
     next(dstate) := case
-                        state != gear & BUTTON_CHANGES : dstate;
+                        BUTTON_CHANGES : dstate;
                         state = open & lstate = UNLOCKED : OPEN;
                         state = close : CLOSED;
                         TRUE : dstate;
@@ -89,8 +90,9 @@ ASSIGN
     next(state) := case
                         state = complete : ( BUTTON_CHANGES ?  unlock : complete );
                         state = unlock   : ( BUTTON_CHANGES ?  lock   : open );
-                        state = open     : ( BUTTON_CHANGES ?  lock   : gear );
-                        state = gear & (gstate = EXTENDING | gstate = RETRACTING) : close;
+                        state = open     : ( BUTTON_CHANGES ?  lock   : gstart );
+                        state = gstart   : gmove;
+                        state = gmove    : close;
                         state = close    : ( BUTTON_CHANGES ?  close  : lock );
                         state = lock     : ( BUTTON_CHANGES ?  open   : complete );
                         TRUE             : state;
@@ -101,15 +103,17 @@ ASSIGN
     -- O Segundo RETRACTED -> EXTENDING -> EXTENDED.
     -- O state define quando existem movimentos a efetuar
     next(gstate) := case
-                        state = gear & dstate = OPEN & gstate = EXTENDED   : RETRACTING;
-                        state = gear & dstate = OPEN & gstate = RETRACTING : RETRACTED;
-                        state = gear & dstate = OPEN & gstate = RETRACTED  : EXTENDING;
-                        state = gear & dstate = OPEN & gstate = EXTENDING  : EXTENDED;
+                        next(button) = DOWN & gstate = RETRACTED  : EXTENDED;
+                        next(button) = UP & gstate = EXTENDED     : RETRACTED;
+                        gstate = EXTENDED & phase = movingup      : RETRACTING;
+                        gstate = RETRACTING & phase = movingup    : RETRACTED;
+                        gstate = RETRACTED & phase = movingdown   : EXTENDING;
+                        gstate = EXTENDING & phase = movingdown   : EXTENDED;
                         TRUE : gstate;
                     esac;
 
     -- O estado seguinte será inevitável apenas se o seu "lstate" for LOCKED e "state" "lock" ou no estado "gear".
-    next(inevitable) := next(lstate) = LOCKED & next(state) = lock | next(state) = gear;
+    next(inevitable) := (next(lstate) = LOCKED & next(state) = lock) | next(state) = gstart | next(state) = gmove;
 
 TRANS
     -- Para garantir que, num estado inevitável, o botão não será mudado,
