@@ -1,4 +1,5 @@
 MODULE main
+
 VAR
     -- Estado do botão
     button : {UP, DOWN};
@@ -8,7 +9,7 @@ VAR
     dstate : {CLOSED, OPEN};
     -- Estado do trinco
     lstate : {LOCKED, UNLOCKED};
-    -- O estado de todo o processo. O estado avança geralmente neste sentido, complete -> unlock -> open -> retracting/extending -> close -> lock -> complete
+    -- O estado de todo o processo. O estado avança geralmente neste sentido, complete -> unlock -> open -> close -> lock -> complete
     -- Na estado unlock, deve-se destrancar o trinco
     -- Na estado open, deve-se abrir as portas
     -- No estado gear, deve iniciar o processo de retracting ou extending da engrenagem
@@ -18,55 +19,83 @@ VAR
     state : {unlock, open, gear, close, lock, complete};
     -- Estado da engrenagem
     gstate : { RETRACTED, EXTENDED, RETRACTING, EXTENDING};
-IVAR
-    -- Botão pressionado pelo piloto, este pode optar por pressiona-lo a qualquer instante.
-    press : {UP, DOWN};
+
+    -- Devido há existência de estados que não podem ser interromptidos, mantemos o boleano "inevitável".
+    inevitable : boolean;
+
+
+DEFINE
+    -- BUTTON_CHANGES indica se o valor do botão será alterado.
+    BUTTON_CHANGES := next(button) !=  button;
+
+
+    goal := phase in {movingup, haltup} -> button = UP &
+            phase in {movingdown, haltdown} -> button = DOWN &
+
+            -- Uma porta só pode estar aberta, se o estado do trinco for UNLOCKED
+            dstate = OPEN -> lstate = UNLOCKED &
+            -- Se o estado do trinco for LOCKED, necessariamente a porta estará fechada
+            lstate = LOCKED -> dstate = CLOSED &
+            -- Se a fase for haltup ou haltdown então já se completou todo o processo.
+            phase in {haltup, haltdown} -> state = complete &
+
+            dstate = CLOSED & gstate != RETRACTED -> gstate = EXTENDED &
+            dstate = CLOSED & gstate != EXTENDED -> gstate = RETRACTED &
+            gstate != RETRACTED & gstate != EXTENDED -> dstate = OPEN &
+            dstate = CLOSED -> gstate != RETRACTING & gstate != EXTENDING;
+
 ASSIGN
-    -- Atribuir o estado inicial
+    -- Atribui o estado inicial
     init(button) := DOWN;
     init(phase) := haltdown;
     init(dstate) := CLOSED;
     init(lstate) := LOCKED;
     init(state) := complete;
     init(gstate) := RETRACTED;
-    -- O botão pressionado é exatamente o botão que o piloto pressiona.
-    next(button) := press;
+    init(inevitable) := FALSE;
+
+
+    -- O botão pressionado pode mudar a qualquer altura, portanto não declaramos o next da variável.
     -- A fase altera para movingup/movingdown assim que o piloto pressione um botão
     -- A fase finalmente muda para haltup/haltdown assim que o estado é "lock"
     next(phase) := case
-                        state != gear & press = DOWN & button = UP : movingdown;
-                        state != gear & press = UP & button = DOWN : movingup;
+                        state != gear & next(button) = DOWN & button = UP : movingdown;
+                        state != gear & next(button) = UP & button = DOWN : movingup;
                         phase = movingup & state = lock : haltup;
                         phase = movingdown & state = lock : haltdown;
                         TRUE : phase;
                    esac;
+
     -- O estado das portas só altera quando o estado global está em "open" ou "close"
     next(dstate) := case
-                        state = open : OPEN;
+                        state != gear & BUTTON_CHANGES : dstate;
+                        state = open & lstate = UNLOCKED : OPEN;
                         state = close : CLOSED;
                         TRUE : dstate;
                     esac;
+
     -- O lstate varia entre LOCKED e UNLOCKED.
     -- Se estivermos no estado de "lock", ele deve ser trancado, e no estado "unlock" destrancado.
-    -- Mas temos a situação excecional de quando o estado é "complete" e o piloto pressiona um botão e, imediatamente a seguir, o oposto. Nessas situações,
-    -- não devemos alterar o estado do trinco.
+    -- Mas temos a situação excecional de quando o estado é "complete" e o piloto pressiona um botão e,
+    -- imediatamente a seguir, o oposto. Nessas situações, não devemos alterar o estado do trinco.
     next(lstate) := case
-                        state != gear & phase = lock & press = button : LOCKED;
-                        state != gear & phase = unlock & press = button : UNLOCKED;
+                        state = lock & !BUTTON_CHANGES : LOCKED;
+                        state = unlock & !BUTTON_CHANGES : UNLOCKED;
                         TRUE : lstate;
                     esac;
-    -- O estado, como foi dito anteriormente, vai no sentido complete -> unlock -> open -> retracting/extending -> close -> lock -> complete
-    -- Mas temos de ter em atenção a situação excecional quando o estado é "complete" e o piloto pressiona um botão e, imediatamente a seguir, o oposto.
-    -- Nessa situação, o estado vai de complete -> unlock -> lock -> complete
+
+    -- O estado, como foi dito anteriormente, vai no sentido complete -> unlock -> open -> close -> lock -> complete
+    -- Tendo em ateção quando o piloto decide pressionar o botão oposto a qualquer instante.
     next(state) := case
-                        state = complete : unlock;
-                        state = unlock : ((press != button) ?  lock : open);
-                        state = open : gear;
-                        state = gear & (dstate = EXTENDING | dstate = RETRACTING) : close;
-                        state = close : lock;
-                        state = lock : complete;
-                        TRUE : state;
+                        state = complete : ( BUTTON_CHANGES ?  unlock : complete );
+                        state = unlock   : ( BUTTON_CHANGES ?  lock   : open );
+                        state = open     : ( BUTTON_CHANGES ?  lock   : gear );
+                        state = gear & (gstate = EXTENDING | gstate = RETRACTING) : close;
+                        state = close    : ( BUTTON_CHANGES ?  close  : lock );
+                        state = lock     : ( BUTTON_CHANGES ?  open   : complete );
+                        TRUE             : state;
                     esac;
+
     -- O gstate varia em 2 momentos.
     -- O primeiro EXTENDED -> RETRACTING -> RETRACTED.
     -- O Segundo RETRACTED -> EXTENDING -> EXTENDED.
@@ -78,18 +107,32 @@ ASSIGN
                         state = gear & dstate = OPEN & gstate = EXTENDING  : EXTENDED;
                         TRUE : gstate;
                     esac;
-DEFINE
-    goal := phase = movingup -> button = UP &
-            phase = movingdown -> button = DOWN &
-            button = UP -> phase = movingup | phase = haltup &
-            button = DOWN -> phase = movingdown | phase = haltdown &
-            dstate = OPEN -> lstate = UNLOCKED &
-            dstate = CLOSED -> lstate = LOCKED &
-            dstate = CLOSED & gstate != RETRACTED -> gstate = EXTENDED &
-            dstate = CLOSED & gstate != EXTENDED -> gstate = RETRACTED &
-            gstate != RETRACTED & gstate != EXTENDED -> dstate = OPEN &
-            dstate = CLOSED -> gstate != RETRACTING & gstate != EXTENDING
-            ;
+
+    -- O estado seguinte será inevitável apenas se o seu "lstate" for LOCKED e "state" "lock".
+    next(inevitable) := next(lstate) = LOCKED & next(state) = lock;
+
+TRANS
+    -- Para garantir que, num estado inevitável, o botão não será mudado,
+    -- tomamos proveito de uma relação de condição TRANS.
+    -- Assim, um estado inevitável implica que o botão não mudará.
+    inevitable -> !BUTTON_CHANGES;
+
+
+-- R11bis
+LTLSPEC
+    -- Se o botão foi pressionado e estiver DOWN, então inevitavelmente:
+    -- - o estado será haltdown
+    -- - o trinco estará trancado
+    -- - as portas estarão fechadas
+    G ( G button = DOWN & state != gear -> F (phase = haltdown & lstate = LOCKED & dstate = CLOSED) );
+
+-- R12bis
+LTLSPEC
+    -- Se o botão foi pressionado e estiver UP, então inevitavelmente:
+    -- - o estado será haltup
+    -- - o trinco estará trancado
+    -- - as portas estarão fechadas
+    G ( G button = UP & state != gear -> F (phase = haltup & lstate = LOCKED & dstate = CLOSED) );
+
 CTLSPEC
     AG goal
-Add Comment Collapse
