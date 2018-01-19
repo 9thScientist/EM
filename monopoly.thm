@@ -1,0 +1,71 @@
+<?xml version="1.0"?>
+<alloy>
+
+<view>
+
+<defaultnode/>
+
+<defaultedge/>
+
+<node>
+   <type name="Blue"/>
+   <type name="Brown"/>
+   <type name="Green"/>
+   <type name="Int"/>
+   <type name="LightBlue"/>
+   <type name="Orange"/>
+   <type name="Pink"/>
+   <type name="Red"/>
+   <type name="String"/>
+   <type name="Yellow"/>
+   <type name="ordering/Ord"/>
+   <type name="seq/Int"/>
+</node>
+
+<node hideunconnected="no">
+   <type name="univ"/>
+</node>
+
+<node hideunconnected="no" shape="Ellipse" color="Gray">
+   <type name="Player"/>
+</node>
+
+<node hideunconnected="no" shape="House" color="Green">
+   <type name="House"/>
+</node>
+
+<node hideunconnected="yes" color="Blue">
+   <type name="Service"/>
+</node>
+
+<node numberatoms="yes" shape="Trapezoid">
+   <type name="Property"/>
+</node>
+
+<node shape="Box" color="Yellow">
+   <type name="Street"/>
+</node>
+
+<node shape="House" color="Red">
+   <type name="Hotel"/>
+</node>
+
+<node shape="Parallelogram" color="Black">
+   <type name="Station"/>
+</node>
+
+<node visible="no" numberatoms="no" shape="Egg" color="White">
+   <type name="Color"/>
+</node>
+
+<edge color="Magic" style="Dashed" visible="no" attribute="yes">
+   <relation name="color"> <type name="Street"/> <type name="Color"/> </relation>
+</edge>
+
+<edge weight="2">
+   <relation name="owner"> <type name="Property"/> <type name="Player"/> </relation>
+</edge>
+
+</view>
+
+</alloy>
