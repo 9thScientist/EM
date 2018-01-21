@@ -302,8 +302,8 @@ pred traces {
 	}
 }
 
-run { traces and all s: State - last | pre.s not in Nop } for 4 but
-exactly 5 State, 6 Street, 3 Player, 6 House 
+run run_traces { traces and all s: State - last | pre.s not in Nop } for 4 but
+exactly 5 State, 6 Street, 2 Player, 6 House 
 
 
 
